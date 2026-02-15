@@ -153,12 +153,15 @@ def remove_old_install():
                 time.sleep(1)
 
 
+IGNORE = shutil.ignore_patterns("nul", "__pycache__", "*.pyc", "logs")
+
+
 def copy_plugin():
-    shutil.copytree(SOURCE, DEST, dirs_exist_ok=True)
+    shutil.copytree(SOURCE, DEST, dirs_exist_ok=True, ignore=IGNORE)
 
 
 def copy_scripts():
-    shutil.copytree(SCRIPTS_SOURCE, SCRIPTS_DEST, dirs_exist_ok=True)
+    shutil.copytree(SCRIPTS_SOURCE, SCRIPTS_DEST, dirs_exist_ok=True, ignore=IGNORE)
 
 
 def install_deps():
