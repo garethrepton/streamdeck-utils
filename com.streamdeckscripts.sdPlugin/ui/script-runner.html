@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Script Runner</title>
+    <style>
+        body {
+            font-family: "Segoe UI", sans-serif;
+            font-size: 13px;
+            padding: 16px;
+            background: transparent;
+            color: #d4d4d4;
+            margin: 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #b0b0b0;
+        }
+        select {
+            width: 100%;
+            padding: 6px 8px;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #d4d4d4;
+            font-size: 13px;
+            outline: none;
+        }
+        select:focus { border-color: #0e639c; }
+        select:disabled { opacity: 0.5; }
+        .help {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #888;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <label for="scriptPath">Script to Run:</label>
+        <select id="scriptPath" disabled>
+            <option value="">Loading scripts...</option>
+        </select>
+        <div class="help">
+            Place .py or .pyw scripts in the plugin's <strong>scripts</strong> folder.
+        </div>
+    </div>
+
+    <script>
+        var websocket = null;
+        var uuid = null;
+        var settings = {};
+
+        function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+            uuid = inUUID;
+            var actionInfo = JSON.parse(inActionInfo);
+            settings = (actionInfo.payload && actionInfo.payload.settings) || {};
+
+            websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+
+            websocket.onopen = function () {
+                websocket.send(JSON.stringify({
+                    event: inRegisterEvent,
+                    uuid: uuid
+                }));
+            };
+
+            websocket.onmessage = function (evt) {
+                var data = JSON.parse(evt.data);
+
+                if (data.event === "sendToPropertyInspector") {
+                    var pl = data.payload;
+                    if (pl && pl.event === "scriptList") {
+                        populateDropdown(pl.scripts);
+                    }
+                }
+
+                if (data.event === "didReceiveSettings") {
+                    settings = (data.payload && data.payload.settings) || {};
+                    applySettings();
+                }
+            };
+        }
+
+        function populateDropdown(scripts) {
+            var sel = document.getElementById("scriptPath");
+            sel.innerHTML = "";
+            sel.disabled = false;
+
+            if (!scripts || scripts.length === 0) {
+                sel.innerHTML = '<option value="">No scripts found</option>';
+                sel.disabled = true;
+                return;
+            }
+
+            sel.innerHTML = '<option value="">-- Select a script --</option>';
+            scripts.forEach(function (s) {
+                var opt = document.createElement("option");
+                opt.value = s.path;
+                opt.textContent = s.name;
+                sel.appendChild(opt);
+            });
+
+            applySettings();
+        }
+
+        function applySettings() {
+            if (settings.scriptPath) {
+                document.getElementById("scriptPath").value = settings.scriptPath;
+            }
+        }
+
+        document.getElementById("scriptPath").addEventListener("change", function () {
+            settings.scriptPath = this.value;
+            if (websocket) {
+                websocket.send(JSON.stringify({
+                    event: "setSettings",
+                    context: uuid,
+                    payload: settings
+                }));
+            }
+        });
+    </script>
+</body>
+</html>

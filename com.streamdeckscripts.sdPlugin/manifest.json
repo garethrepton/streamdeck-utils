@@ -1,0 +1,54 @@
+{
+  "SDKVersion": 2,
+  "Author": "Gareth",
+  "Name": "Stream Deck Utils",
+  "Description": "Mic mute toggle and Python script runner",
+  "Version": "1.0.0",
+  "Category": "Utilities",
+  "CategoryIcon": "imgs/plugin/icon",
+  "Icon": "imgs/plugin/icon",
+  "CodePath": "run.bat",
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Software": {
+    "MinimumVersion": "6.0"
+  },
+  "Actions": [
+    {
+      "UUID": "com.streamdeckscripts.mic-mute",
+      "Name": "Mic Mute Toggle",
+      "Icon": "imgs/actions/mic-mute/unmuted",
+      "Tooltip": "Toggle microphone mute state",
+      "SupportedInMultiActions": true,
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/mic-mute/unmuted",
+          "Name": "Unmuted"
+        },
+        {
+          "Image": "imgs/actions/mic-mute/muted",
+          "Name": "Muted"
+        }
+      ]
+    },
+    {
+      "UUID": "com.streamdeckscripts.script-runner",
+      "Name": "Script Runner",
+      "Icon": "imgs/actions/script-runner/icon",
+      "Tooltip": "Run a Python script from the scripts folder",
+      "PropertyInspectorPath": "ui/script-runner.html",
+      "SupportedInMultiActions": false,
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/script-runner/icon"
+        }
+      ]
+    }
+  ]
+}
