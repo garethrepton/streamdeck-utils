@@ -2,7 +2,7 @@
   "SDKVersion": 2,
   "Author": "Gareth",
   "Name": "Stream Deck Utils",
-  "Description": "Mic mute toggle and Python script runner",
+  "Description": "Mic mute toggle, script runner, and audio status indicator",
   "Version": "1.0.0",
   "Category": "Utilities",
   "CategoryIcon": "imgs/plugin/icon",
@@ -47,6 +47,24 @@
       "States": [
         {
           "Image": "imgs/actions/script-runner/icon"
+        }
+      ]
+    },
+    {
+      "UUID": "com.streamdeckscripts.audio-status",
+      "Name": "Audio Status",
+      "Icon": "imgs/actions/audio-status/ok",
+      "Tooltip": "Shows whether audio devices are correctly initialized",
+      "SupportedInMultiActions": false,
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/audio-status/ok",
+          "Name": "OK"
+        },
+        {
+          "Image": "imgs/actions/audio-status/error",
+          "Name": "Error"
         }
       ]
     }

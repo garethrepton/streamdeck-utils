@@ -1,14 +1,16 @@
-"""Stream Deck Utils — Mic mute toggle and Python script runner plugin."""
+"""Stream Deck Utils — Mic mute toggle, script runner, and audio status plugin."""
 
 import logging
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from streamdeck_sdk import StreamDeck, Action
 from streamdeck_sdk.sd_objs import events_received_objs
 
 from audio_controller import AudioController
+from audio_status import check_audio_status
 from script_scanner import ScriptScanner
 
 PLUGIN_DIR = Path(__file__).parent.resolve()
@@ -84,11 +86,68 @@ class ScriptRunnerAction(Action):
             self.show_alert(obj.context)
 
 
+class AudioStatusAction(Action):
+    UUID = "com.streamdeckscripts.audio-status"
+    FAST_INTERVAL = 10
+    SLOW_INTERVAL = 300
+
+    def __init__(self):
+        super().__init__()
+        self._contexts: set[str] = set()
+        self._poll_interval = self.FAST_INTERVAL
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def on_will_appear(self, obj: events_received_objs.WillAppear) -> None:
+        self._contexts.add(obj.context)
+        if self._thread is None:
+            self._stop_event.clear()
+            self._thread = threading.Thread(target=self._poll, daemon=True)
+            self._thread.start()
+
+    def on_will_disappear(self, obj: events_received_objs.WillDisappear) -> None:
+        self._contexts.discard(obj.context)
+        if not self._contexts:
+            self._stop_event.set()
+            self._thread = None
+
+    def on_key_down(self, obj: events_received_objs.KeyDown) -> None:
+        script = SCRIPTS_DIR / "restart-elgato.pyw"
+        if script.exists():
+            subprocess.Popen(
+                [sys.executable, str(script)],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            logger.info("Running restart-elgato script")
+        else:
+            logger.error("restart-elgato.pyw not found in scripts/")
+            self.show_alert(obj.context)
+            return
+        self._poll_interval = self.FAST_INTERVAL
+        self._stop_event.set()
+        self._stop_event.clear()
+
+    def _poll(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                ok, detail = check_audio_status()
+            except Exception:
+                logger.exception("Audio status check failed")
+                ok = False
+            state = 0 if ok else 1
+            for ctx in list(self._contexts):
+                self.set_state(ctx, state)
+            self._poll_interval = self.SLOW_INTERVAL if ok else self.FAST_INTERVAL
+            logger.debug("Audio status: %s, next check in %ds", "OK" if ok else "ERROR", self._poll_interval)
+            self._stop_event.wait(self._poll_interval)
+
+
 if __name__ == "__main__":
     StreamDeck(
         actions=[
             MicMuteAction(),
             ScriptRunnerAction(),
+            AudioStatusAction(),
         ],
         log_file=LOG_FILE,
         log_level=logging.DEBUG,

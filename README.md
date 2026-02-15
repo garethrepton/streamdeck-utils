@@ -2,10 +2,7 @@
 
 # Stream Deck Utils
 
-A local-only Stream Deck plugin with two actions:
-
-- **Mic Mute Toggle** — Toggles system microphone mute via Windows Core Audio API (pycaw). Works across Discord, Game Bar, and all apps.
-- **Script Runner** — Auto-discovers Python scripts in the `scripts/` folder. Pick one per button via a dropdown in the Stream Deck settings.
+A local only stream deck plugin framework, allowing you to add python scripts and they become plugins. Its vibe coded, but a well understood problem.
 
 ## Requirements
 
