@@ -8,6 +8,9 @@ import subprocess
 import threading
 import time
 import os
+import sys
+import tempfile
+import msvcrt
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
@@ -42,6 +45,29 @@ SURFACE  = "#313244"
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 NO_WINDOW = subprocess.CREATE_NO_WINDOW
+LOCK_FILE = os.path.join(tempfile.gettempdir(), "restart-elgato.lock")
+SUBPROCESS_TIMEOUT = 30
+
+
+def acquire_lock():
+    """Try to acquire a file lock. Returns the open file handle, or None if already running."""
+    try:
+        fh = open(LOCK_FILE, "w")
+        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        return fh
+    except (OSError, IOError):
+        return None
+
+
+def release_lock(fh):
+    """Release the file lock."""
+    if fh is None:
+        return
+    try:
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        fh.close()
+    except (OSError, IOError):
+        pass
 
 
 def find_exe(paths):
@@ -53,20 +79,26 @@ def find_exe(paths):
 
 def kill_processes(*names):
     for name in names:
-        subprocess.run(
-            ["taskkill", "/F", "/IM", f"{name}.exe"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            creationflags=NO_WINDOW,
-        )
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", f"{name}.exe"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=NO_WINDOW, timeout=SUBPROCESS_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            pass
 
 
 def is_running(name):
-    result = subprocess.run(
-        ["tasklist", "/FI", f"IMAGENAME eq {name}.exe", "/NH"],
-        capture_output=True, text=True,
-        creationflags=NO_WINDOW,
-    )
-    return name.lower() in result.stdout.lower()
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"IMAGENAME eq {name}.exe", "/NH"],
+            capture_output=True, text=True,
+            creationflags=NO_WINDOW, timeout=SUBPROCESS_TIMEOUT,
+        )
+        return name.lower() in result.stdout.lower()
+    except subprocess.TimeoutExpired:
+        return False
 
 
 def set_audio_devices():
@@ -78,12 +110,15 @@ if ($out) { Set-AudioDevice -ID $out.ID | Out-Null; Write-Host "output:$($out.Na
 $mic = $devices | Where-Object { $_.Type -eq 'Recording' -and $_.Name -like '*MicrophoneFX*' }
 if ($mic) { Set-AudioDevice -ID $mic.ID | Out-Null; Write-Host "mic:$($mic.Name)" }
 """
-    result = subprocess.run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-        capture_output=True, text=True,
-        creationflags=NO_WINDOW,
-    )
-    return result.stdout.strip()
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+            capture_output=True, text=True,
+            creationflags=NO_WINDOW, timeout=SUBPROCESS_TIMEOUT,
+        )
+        return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        return ""
 
 
 # ── GUI ────────────────────────────────────────────────────────────────────
@@ -100,7 +135,8 @@ class RestartApp:
         "Setting default audio devices",
     ]
 
-    def __init__(self):
+    def __init__(self, lock_handle):
+        self._lock_handle = lock_handle
         self.root = tk.Tk()
         self.root.title("Restart Elgato")
         self.root.configure(bg=BG)
@@ -113,6 +149,8 @@ class RestartApp:
         y = self.root.winfo_screenheight() - height - padding - 48  # 48 for taskbar
         self.root.geometry(f"{width}x{height}+{x}+{y}")
         self.root.overrideredirect(True)  # Remove title bar for a cleaner toast look
+        self.root.bind("<Escape>", lambda _: self._force_quit())
+        self.root.protocol("WM_DELETE_WINDOW", self._force_quit)
 
         # Title
         tk.Label(
@@ -185,13 +223,18 @@ class RestartApp:
     def finish_step(self, index, state="done"):
         self.set_step(index, state)
 
+    def _force_quit(self):
+        release_lock(self._lock_handle)
+        self.root.destroy()
+        os._exit(0)
+
     def finish(self, success=True):
         def update():
             if success:
                 self.status.config(text="All done!", fg=GREEN)
             else:
                 self.status.config(text="Completed with errors", fg=RED)
-            self.root.after(2500, self.root.destroy)
+            self.root.after(2500, self._force_quit)
         self.root.after(0, update)
 
     def run(self):
@@ -270,4 +313,10 @@ class RestartApp:
 
 
 if __name__ == "__main__":
-    RestartApp()
+    lock = acquire_lock()
+    if lock is None:
+        sys.exit(0)  # Already running
+    try:
+        RestartApp(lock)
+    finally:
+        release_lock(lock)
